@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import socket from './socket';
+import './PlayerApp.css';
 
 function PlayerApp() {
   const [name, setName] = useState('');
@@ -7,19 +8,32 @@ function PlayerApp() {
   const [joined, setJoined] = useState(false);
   const [question, setQuestion] = useState(null);
   const [selected, setSelected] = useState('');
-  const [pointsAwarded, setPointsAwarded] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [visibleLeaderboard, setVisibleLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState([]);
   const [quizEnded, setQuizEnded] = useState(false);
   const [players, setPlayers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const prevLeaderboardRef = useRef([]);
 
   const joinRoom = () => {
     if (name.trim() && roomCode.trim()) {
       setErrorMessage('');
-      socket.emit('join', { name, roomCode });
+      socket.emit('join-room', { name, roomCode });
     }
+  };
+
+  const getEmoji = (index) => {
+    const emojis = ['🐺', '🐻', '🦖', '🐼', '🦊', '🐯', '🦞', '🦝', '🦁', '🦇'];
+    return emojis[index % emojis.length];
+  };
+
+  const getRankChange = (id, index) => {
+    const oldIndex = prevLeaderboardRef.current.findIndex((p) => p.id === id);
+    if (oldIndex === -1) return '';
+    if (oldIndex > index) return 'up';
+    if (oldIndex < index) return 'down';
+    return '';
   };
 
   useEffect(() => {
@@ -27,74 +41,46 @@ function PlayerApp() {
       if (q && q.text && q.options) {
         setQuestion(q);
         setSelected('');
-        setPointsAwarded(null);
-        setShowLeaderboard(false);
         setTimeLeft(q.timeLimit || 15);
       } else {
         setQuestion(null);
-        console.warn('Received invalid question:', q);
       }
-    });
-
-    socket.on('start-quiz', () => {
-      socket.emit('request-next-question', roomCode);
-    });
-
-    socket.on('question-ended', () => {
-      setShowLeaderboard(true);
     });
 
     socket.on('leaderboard', (data) => {
-      setLeaderboard(data);
-    });
-
-    socket.on('final-leaderboard', (data) => {
-      setLeaderboard(data);
-    });
-
-    socket.on('quiz-end', () => {
-      setQuizEnded(true);
-    });
-
-    socket.on('lobby-update', (data) => {
-      setPlayers(data);
-      if (data.length > 0) {
-        setJoined(true);
+      if (!quizEnded) {
+        setLeaderboard((current) => {
+          prevLeaderboardRef.current = current;
+          return data.filter(p => p && p.name);
+        });
+        setVisibleLeaderboard(true);
+        setTimeout(() => setVisibleLeaderboard(false), 5000);
       }
     });
 
-    socket.on('time-left', (time) => {
-      setTimeLeft(time);
+    socket.on('final-leaderboard', (data) => {
+      prevLeaderboardRef.current = leaderboard;
+      setLeaderboard(data.filter(p => p && p.name));
+      setVisibleLeaderboard(false); // ✅ Hide overlay
+      setQuizEnded(true); // ✅ Show final leaderboard
     });
 
-    socket.on('answer-result', ({ score }) => {
-      setPointsAwarded(score);
+    socket.on('quiz-end', () => setQuizEnded(true));
+
+    socket.on('lobby-update', (data) => {
+      setPlayers(data);
+      if (data.length > 0) setJoined(true);
     });
+
+    socket.on('time-left', (time) => setTimeLeft(time));
 
     socket.on('room-error', ({ message }) => {
       setErrorMessage(message);
       setJoined(false);
     });
 
-    socket.on('question-error', (msg) => {
-      console.error('Server error:', msg);
-      setQuestion(null);
-    });
-
-    return () => {
-      socket.off('question');
-      socket.off('start-quiz');
-      socket.off('question-ended');
-      socket.off('leaderboard');
-      socket.off('final-leaderboard');
-      socket.off('quiz-end');
-      socket.off('lobby-update');
-      socket.off('time-left');
-      socket.off('answer-result');
-      socket.off('room-error');
-      socket.off('question-error');
-    };
-  }, [roomCode]);
+    return () => socket.removeAllListeners();
+  }, [leaderboard, quizEnded]);
 
   const handleSelect = (opt) => {
     if (!selected) {
@@ -103,110 +89,101 @@ function PlayerApp() {
     }
   };
 
-  const filteredLeaderboard = leaderboard.filter(p => p.name.toLowerCase() !== 'host');
+  const filteredLeaderboard = leaderboard
+    .filter(p => p.name.toLowerCase() !== 'host')
+    .sort((a, b) => b.score - a.score);
+
+  const topScore = Math.max(...filteredLeaderboard.map(p => p.score), 1);
   const filteredPlayers = players.filter(p => p.name.toLowerCase() !== 'host');
 
-  if (!joined) {
-    return (
-      <div style={{ padding: '20px' }}>
-        <h2>Join Quiz Room</h2>
-        <input
-          type="text"
-          placeholder="Enter Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={{ width: '100%', marginBottom: '10px' }}
-        />
-        <input
-          type="text"
-          placeholder="Enter Room Code"
-          value={roomCode}
-          onChange={(e) => setRoomCode(e.target.value)}
-          style={{ width: '100%', marginBottom: '10px' }}
-        />
-        <button onClick={joinRoom}>Join</button>
-        {errorMessage && (
-          <p style={{ color: 'red', marginTop: '10px' }}>{errorMessage}</p>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>Welcome {name}</h2>
-
-      {quizEnded ? (
-        <div>
-          <h3>🎉 Quiz Ended</h3>
-          <h4>🏆 Final Leaderboard</h4>
-          <ul>
-            {filteredLeaderboard.map((p, i) => (
-              <li key={p.id}>
-                {i + 1}. {p.name} - {p.score} pts
-              </li>
-            ))}
-          </ul>
+    <div className="quiz-container">
+      {/* ✅ Show overlay only if quiz has not ended */}
+      {visibleLeaderboard && !quizEnded && (
+        <div className="leaderboard-overlay">
+          <h3>🏆 Leaderboard</h3>
+          <div className="leaderboard">
+            {filteredLeaderboard.map((p, i) => {
+              if (!p) return null;
+              const change = getRankChange(p.id, i);
+              const isCurrent = p.name === name;
+              return (
+                <div
+                  key={p.id}
+                  className={`leaderboard-entry ${change} ${isCurrent ? 'highlight' : ''}`}
+                >
+                  <div className="bar" style={{ width: `${(p.score / topScore) * 100}%` }}></div>
+                  <span className="rank">{i + 1}.</span>
+                  <span className="emoji">{getEmoji(i)}</span>
+                  <span className="name">{p.name}</span>
+                  <span className="score">{p.score} p</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ) : question && question.text && question.options ? (
-        <div>
+      )}
+
+      {!joined ? (
+        <div className="join-container">
+          <div className="join-box">
+            <h2>Join Quiz Room</h2>
+            <input type="text" placeholder="Enter Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input type="text" placeholder="Enter Room Code" value={roomCode} onChange={(e) => setRoomCode(e.target.value)} />
+            <button onClick={joinRoom}>Join</button>
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </div>
+        </div>
+      ) : quizEnded ? (
+        <>
+          <h3>⏰ Quiz Ended</h3>
+          <h4>🏆 Final Leaderboard</h4>
+          <div className="leaderboard">
+            {filteredLeaderboard.map((p, i) => {
+              const change = getRankChange(p.id, i);
+              const isCurrent = p.name === name;
+              return (
+                <div
+                  key={p.id}
+                  className={`leaderboard-entry ${change} ${isCurrent ? 'highlight' : ''}`}
+                >
+                  <div className="bar" style={{ width: `${(p.score / topScore) * 100}%` }}></div>
+                  <span className="rank">{i + 1}.</span>
+                  <span className="emoji">{getEmoji(i)}</span>
+                  <span className="name">{p.name}</span>
+                  <span className="score">{p.score} p</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : question ? (
+        <>
           <h3>⏱ Time Left: {Math.max(timeLeft, 0)}s</h3>
           <h4>📝 {question.text}</h4>
-          <ul style={{ listStyleType: 'none', padding: 0 }}>
+          <ul className="options-list">
             {question.options.map((opt, i) => (
               <li key={i}>
                 <button
                   disabled={!!selected}
+                  className={selected === opt ? 'option-selected' : ''}
                   onClick={() => handleSelect(opt)}
-                  style={{
-                    margin: '5px 0',
-                    background: selected === opt ? '#4caf50' : '#eee',
-                    width: '100%',
-                    padding: '10px',
-                    cursor: selected ? 'not-allowed' : 'pointer',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px'
-                  }}
                 >
                   {opt}
                 </button>
               </li>
             ))}
           </ul>
-
-          {selected && (
-            <p style={{ marginTop: '10px', fontWeight: 'bold' }}>
-              ✅ Answer Locked: {selected}
-            </p>
-          )}
-
-          {showLeaderboard && (
-            <div style={{ marginTop: '20px' }}>
-              <h4>🏆 Leaderboard</h4>
-              <ul>
-                {filteredLeaderboard.map((p, i) => (
-                  <li key={p.id}>
-                    {i + 1}. {p.name} - {p.score}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+          {selected && <p className="answer-feedback">✅ Answer Locked: {selected}</p>}
+        </>
       ) : (
-        <div style={{
-          padding: '20px',
-          border: '2px dashed #aaa',
-          borderRadius: '10px',
-          background: '#f3f3f3'
-        }}>
+        <div className="waiting-room">
           <h3>🕓 Waiting for Host to Start the Quiz...</h3>
           <p>Room Code: <strong>{roomCode}</strong></p>
-
           <h4>👥 Players in the Lobby</h4>
           <ul>
-            {filteredPlayers.map((p) => (
-              <li key={p.id} style={{ marginBottom: '5px' }}>✅ {p.name}</li>
+            {filteredPlayers.map(p => (
+              <li key={p.id}>✅ {p.name}</li>
             ))}
           </ul>
         </div>
