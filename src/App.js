@@ -14,6 +14,8 @@ function PlayerApp() {
   const [quizEnded, setQuizEnded] = useState(false);
   const [players, setPlayers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [allAnswered, setAllAnswered] = useState(false);
+  const [correctAnswer, setCorrectAnswer] = useState('');
   const prevLeaderboardRef = useRef([]);
 
   const joinRoom = () => {
@@ -41,7 +43,9 @@ function PlayerApp() {
       if (q && q.text && q.options) {
         setQuestion(q);
         setSelected('');
+        setCorrectAnswer('');
         setTimeLeft(q.timeLimit || 15);
+        setAllAnswered(false);
       } else {
         setQuestion(null);
       }
@@ -61,8 +65,8 @@ function PlayerApp() {
     socket.on('final-leaderboard', (data) => {
       prevLeaderboardRef.current = leaderboard;
       setLeaderboard(data.filter(p => p && p.name));
-      setVisibleLeaderboard(false); // ✅ Hide overlay
-      setQuizEnded(true); // ✅ Show final leaderboard
+      setVisibleLeaderboard(false);
+      setQuizEnded(true);
     });
 
     socket.on('quiz-end', () => setQuizEnded(true));
@@ -74,9 +78,20 @@ function PlayerApp() {
 
     socket.on('time-left', (time) => setTimeLeft(time));
 
-    socket.on('room-error', ({ message }) => {
+    socket.on('room-error', (data) => {
+      const message = data?.message || 'Unknown room error.';
       setErrorMessage(message);
       setJoined(false);
+    });
+
+    socket.on('all-answered', (data) => {
+      console.log('✅ all-answered event received:', data);
+      if (data && typeof data.correct === 'string' && data.correct.trim() !== '') {
+        setCorrectAnswer(data.correct);
+      } else {
+        setCorrectAnswer('N/A');
+      }
+      setAllAnswered(true);
     });
 
     return () => socket.removeAllListeners();
@@ -98,13 +113,11 @@ function PlayerApp() {
 
   return (
     <div className="quiz-container">
-      {/* ✅ Show overlay only if quiz has not ended */}
       {visibleLeaderboard && !quizEnded && (
         <div className="leaderboard-overlay">
           <h3>🏆 Leaderboard</h3>
           <div className="leaderboard">
             {filteredLeaderboard.map((p, i) => {
-              if (!p) return null;
               const change = getRankChange(p.id, i);
               const isCurrent = p.name === name;
               return (
@@ -175,6 +188,13 @@ function PlayerApp() {
             ))}
           </ul>
           {selected && <p className="answer-feedback">✅ Answer Locked: {selected}</p>}
+          {allAnswered && (
+            <div className="answer-feedback">
+              ✅ All players have answered the question
+              <br />
+              🎯 <strong>Correct Answer:</strong> {correctAnswer || 'N/A'}
+            </div>
+          )}
         </>
       ) : (
         <div className="waiting-room">

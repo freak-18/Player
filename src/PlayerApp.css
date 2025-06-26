@@ -95,7 +95,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Question options */
 .options-list {
   list-style: none;
   padding: 0;
@@ -126,12 +125,22 @@ button:disabled {
   background-color: #28a745 !important;
 }
 
-/* Feedback */
+/* ✅ FIXED feedback styling */
 .answer-feedback {
-  margin-top: 16px;
+  margin-top: 20px;
+  font-weight: bold;
+  font-size: 1.3rem;
   color: #00ffcc;
-  font-weight: 600;
-  font-size: 1.1rem;
+  background-color: rgba(0, 255, 204, 0.08);
+  padding: 12px 20px;
+  border-radius: 10px;
+  display: inline-block;
+  animation: fadein 0.5s ease-in;
+}
+
+@keyframes fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .score-feedback {
@@ -141,7 +150,6 @@ button:disabled {
   font-size: 1rem;
 }
 
-/* Leaderboard Overlay */
 .leaderboard-overlay {
   position: fixed;
   top: 0;
@@ -246,21 +254,6 @@ button:disabled {
   font-weight: bold;
 }
 
-/* Medals for top 3 */
-.leaderboard-entry:nth-child(1) .rank::after {
-  content: "";
-  margin-left: 4px;
-}
-.leaderboard-entry:nth-child(2) .rank::after {
-  content: "";
-  margin-left: 4px;
-}
-.leaderboard-entry:nth-child(3) .rank::after {
-  content: "";
-  margin-left: 4px;
-}
-
-/* Rank changes */
 .leaderboard-entry.up {
   border-left: 4px solid #00e676;
 }
@@ -273,7 +266,6 @@ button:disabled {
   box-shadow: 0 0 10px rgba(0, 188, 212, 0.2);
 }
 
-/* Waiting room */
 .waiting-room {
   padding: 24px;
   background-color: #232323;
@@ -304,7 +296,6 @@ button:disabled {
   margin-top: 12px;
 }
 
-/* Responsive */
 @media (max-width: 600px) {
   .join-container,
   .leaderboard-overlay,
