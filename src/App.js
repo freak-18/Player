@@ -26,7 +26,7 @@ function PlayerApp() {
   };
 
   const getEmoji = (index) => {
-    const emojis = ['🐺', '🐻', '🦖', '🐼', '🦊', '🐯', '🦞', '🦝', '🦁', '🦇'];
+    const emojis = ['🐺', '🐻', '🦖', '🐼', '🦊', '🐯', '🦞', '🦝', '🦁', '🦇', '🐦‍🔥'];
     return emojis[index % emojis.length];
   };
 
@@ -85,17 +85,33 @@ function PlayerApp() {
     });
 
     socket.on('all-answered', (data) => {
-      console.log('✅ all-answered event received:', data);
-      if (data && typeof data.correct === 'string' && data.correct.trim() !== '') {
-        setCorrectAnswer(data.correct);
-      } else {
-        setCorrectAnswer('N/A');
-      }
       setAllAnswered(true);
+      setCorrectAnswer(data.correct || 'N/A');
+    });
+
+    socket.on('kicked', () => {
+      alert('❌ You have been kicked from the room by the host.');
+      resetPlayerState();
     });
 
     return () => socket.removeAllListeners();
   }, [leaderboard, quizEnded]);
+
+  const resetPlayerState = () => {
+    setName('');
+    setRoomCode('');
+    setJoined(false);
+    setQuestion(null);
+    setSelected('');
+    setTimeLeft(0);
+    setVisibleLeaderboard(false);
+    setLeaderboard([]);
+    setQuizEnded(false);
+    setPlayers([]);
+    setErrorMessage('');
+    setAllAnswered(false);
+    setCorrectAnswer('');
+  };
 
   const handleSelect = (opt) => {
     if (!selected) {
@@ -213,3 +229,4 @@ function PlayerApp() {
 }
 
 export default PlayerApp;
+
