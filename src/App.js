@@ -1,3 +1,5 @@
+// PlayerApp.js
+
 import React, { useEffect, useState, useRef } from 'react';
 import socket from './socket';
 import './PlayerApp.css';
@@ -13,14 +15,17 @@ function PlayerApp() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [quizEnded, setQuizEnded] = useState(false);
   const [players, setPlayers] = useState([]);
+  const [maxPlayers, setMaxPlayers] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [allAnswered, setAllAnswered] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState('');
+  const [joining, setJoining] = useState(false);
   const prevLeaderboardRef = useRef([]);
 
   const joinRoom = () => {
     if (name.trim() && roomCode.trim()) {
       setErrorMessage('');
+      setJoining(true);
       socket.emit('join-room', { name, roomCode });
     }
   };
@@ -55,7 +60,7 @@ function PlayerApp() {
       if (!quizEnded) {
         setLeaderboard((current) => {
           prevLeaderboardRef.current = current;
-          return data.filter(p => p && p.name);
+          return data.filter(p => p && p.name && p.name.toLowerCase() !== 'host');
         });
         setVisibleLeaderboard(true);
         setTimeout(() => setVisibleLeaderboard(false), 5000);
@@ -64,16 +69,18 @@ function PlayerApp() {
 
     socket.on('final-leaderboard', (data) => {
       prevLeaderboardRef.current = leaderboard;
-      setLeaderboard(data.filter(p => p && p.name));
+      setLeaderboard(data.filter(p => p && p.name && p.name.toLowerCase() !== 'host'));
       setVisibleLeaderboard(false);
       setQuizEnded(true);
     });
 
     socket.on('quiz-end', () => setQuizEnded(true));
 
-    socket.on('lobby-update', (data) => {
-      setPlayers(data);
-      if (data.length > 0) setJoined(true);
+    socket.on('lobby-update', ({ players, maxPlayers }) => {
+      setPlayers(players || []);
+      setMaxPlayers(maxPlayers || null);
+      setJoined(true);
+      setJoining(false);
     });
 
     socket.on('time-left', (time) => setTimeLeft(time));
@@ -82,6 +89,13 @@ function PlayerApp() {
       const message = data?.message || 'Unknown room error.';
       setErrorMessage(message);
       setJoined(false);
+      setJoining(false);
+    });
+
+    socket.on('room-full', () => {
+      setErrorMessage('🚫 Room is full. Please try another room or wait.');
+      setJoined(false);
+      setJoining(false);
     });
 
     socket.on('all-answered', (data) => {
@@ -108,9 +122,11 @@ function PlayerApp() {
     setLeaderboard([]);
     setQuizEnded(false);
     setPlayers([]);
+    setMaxPlayers(null);
     setErrorMessage('');
     setAllAnswered(false);
     setCorrectAnswer('');
+    setJoining(false);
   };
 
   const handleSelect = (opt) => {
@@ -159,7 +175,9 @@ function PlayerApp() {
             <h2>Join Quiz Room</h2>
             <input type="text" placeholder="Enter Name" value={name} onChange={(e) => setName(e.target.value)} />
             <input type="text" placeholder="Enter Room Code" value={roomCode} onChange={(e) => setRoomCode(e.target.value)} />
-            <button onClick={joinRoom}>Join</button>
+            <button onClick={joinRoom} disabled={joining}>
+              {joining ? 'Joining...' : 'Join'}
+            </button>
             {errorMessage && <p className="error-message">{errorMessage}</p>}
           </div>
         </div>
@@ -216,7 +234,10 @@ function PlayerApp() {
         <div className="waiting-room">
           <h3>🕓 Waiting for Host to Start the Quiz...</h3>
           <p>Room Code: <strong>{roomCode}</strong></p>
-          <h4>👥 Players in the Lobby</h4>
+          <h4>
+            👥 Players in the Lobby ({filteredPlayers.length}
+            {maxPlayers ? ` / ${maxPlayers}` : ''})
+          </h4>
           <ul>
             {filteredPlayers.map(p => (
               <li key={p.id}>✅ {p.name}</li>
@@ -229,4 +250,3 @@ function PlayerApp() {
 }
 
 export default PlayerApp;
-
