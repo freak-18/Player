@@ -1,5 +1,3 @@
-// PlayerApp.js
-
 import React, { useEffect, useState, useRef } from 'react';
 import socket from './socket';
 import './PlayerApp.css';
@@ -20,6 +18,8 @@ function PlayerApp() {
   const [allAnswered, setAllAnswered] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [joining, setJoining] = useState(false);
+  const [showingBetweenQuestions, setShowingBetweenQuestions] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const prevLeaderboardRef = useRef([]);
 
   const joinRoom = () => {
@@ -51,6 +51,9 @@ function PlayerApp() {
         setCorrectAnswer('');
         setTimeLeft(q.timeLimit || 15);
         setAllAnswered(false);
+        setVisibleLeaderboard(false);
+        setShowingBetweenQuestions(false);
+        setIsLocked(false);
       } else {
         setQuestion(null);
       }
@@ -58,18 +61,16 @@ function PlayerApp() {
 
     socket.on('leaderboard', (data) => {
       if (!quizEnded) {
-        setLeaderboard((current) => {
-          prevLeaderboardRef.current = current;
-          return data.filter(p => p && p.name && p.name.toLowerCase() !== 'host');
-        });
+        prevLeaderboardRef.current = leaderboard;
+        setLeaderboard(data.filter(p => p && p.name.toLowerCase() !== 'host'));
         setVisibleLeaderboard(true);
-        setTimeout(() => setVisibleLeaderboard(false), 5000);
+        setShowingBetweenQuestions(true);
       }
     });
 
     socket.on('final-leaderboard', (data) => {
       prevLeaderboardRef.current = leaderboard;
-      setLeaderboard(data.filter(p => p && p.name && p.name.toLowerCase() !== 'host'));
+      setLeaderboard(data.filter(p => p && p.name.toLowerCase() !== 'host'));
       setVisibleLeaderboard(false);
       setQuizEnded(true);
     });
@@ -83,7 +84,9 @@ function PlayerApp() {
       setJoining(false);
     });
 
-    socket.on('time-left', (time) => setTimeLeft(time));
+    socket.on('time-left', (time) => {
+      setTimeLeft(time);
+    });
 
     socket.on('room-error', (data) => {
       const message = data?.message || 'Unknown room error.';
@@ -101,6 +104,10 @@ function PlayerApp() {
     socket.on('all-answered', (data) => {
       setAllAnswered(true);
       setCorrectAnswer(data.correct || 'N/A');
+    });
+    
+    socket.on('question-locked', () => {
+      setIsLocked(true);
     });
 
     socket.on('kicked', () => {
@@ -127,10 +134,12 @@ function PlayerApp() {
     setAllAnswered(false);
     setCorrectAnswer('');
     setJoining(false);
+    setShowingBetweenQuestions(false);
+    setIsLocked(false);
   };
 
   const handleSelect = (opt) => {
-    if (!selected) {
+    if (!selected && !isLocked) {
       setSelected(opt);
       socket.emit('answer', { option: opt, roomCode });
     }
@@ -145,7 +154,7 @@ function PlayerApp() {
 
   return (
     <div className="quiz-container">
-      {visibleLeaderboard && !quizEnded && (
+      {(visibleLeaderboard || showingBetweenQuestions) && !quizEnded && (
         <div className="leaderboard-overlay">
           <h3>🏆 Leaderboard</h3>
           <div className="leaderboard">
@@ -183,8 +192,8 @@ function PlayerApp() {
         </div>
       ) : quizEnded ? (
         <>
-          <h3>⏰ Quiz Ended</h3>
-          <h4>🏆 Final Leaderboard</h4>
+          <h3> ⮞⮞ Quiz Ended ⮜⮜</h3>
+          <h3>🏆 Final Leaderboard </h3>
           <div className="leaderboard">
             {filteredLeaderboard.map((p, i) => {
               const change = getRankChange(p.id, i);
@@ -212,7 +221,7 @@ function PlayerApp() {
             {question.options.map((opt, i) => (
               <li key={i}>
                 <button
-                  disabled={!!selected}
+                  disabled={!!selected || isLocked}
                   className={selected === opt ? 'option-selected' : ''}
                   onClick={() => handleSelect(opt)}
                 >
@@ -226,21 +235,21 @@ function PlayerApp() {
             <div className="answer-feedback">
               ✅ All players have answered the question
               <br />
-              🎯 <strong>Correct Answer:</strong> {correctAnswer || 'N/A'}
+               <strong>Correct Answer:</strong> {correctAnswer || 'N/A'}
             </div>
           )}
         </>
       ) : (
         <div className="waiting-room">
-          <h3>🕓 Waiting for Host to Start the Quiz...</h3>
+          <h3> Waiting for Host to Start the Quiz...</h3>
           <p>Room Code: <strong>{roomCode}</strong></p>
           <h4>
-            👥 Players in the Lobby ({filteredPlayers.length}
+             ▼ Players in the Lobby ▼ ({filteredPlayers.length}
             {maxPlayers ? ` / ${maxPlayers}` : ''})
           </h4>
           <ul>
             {filteredPlayers.map(p => (
-              <li key={p.id}>✅ {p.name}</li>
+              <li key={p.id}>★ {p.name}</li>
             ))}
           </ul>
         </div>
